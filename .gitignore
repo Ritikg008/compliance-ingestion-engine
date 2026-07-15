@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Environment
+.env
+
+# Temp data files
+data/temp_video/*
+data/temp_frames/*
+*.mp4
+*.jpg
+*.jpeg
+
+# Logs
+*.log
+
+# VS Code
+.vscode/
+
+# Docker
+docker/data/
+
+# HuggingFace cache
+*.bin
+*.safetensors

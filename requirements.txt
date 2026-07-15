@@ -1,0 +1,17 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+langgraph==0.2.39
+langchain==0.3.4
+langchain-groq==0.2.0
+langchain-qdrant==0.2.0
+qdrant-client==1.11.3
+sentence-transformers==3.1.1
+faster-whisper==1.0.3
+pytesseract==0.3.13
+yt-dlp==2024.10.7
+opencv-python==4.10.0.84
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-dotenv==1.0.1
+langsmith==0.1.137
+ffmpeg-python==0.2.0
