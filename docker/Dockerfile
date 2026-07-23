@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     libglib2.0-0 \
     libgl1 \
+    nodejs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

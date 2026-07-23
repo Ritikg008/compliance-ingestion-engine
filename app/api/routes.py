@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException
 from app.models.schemas import (
     IngestRequest,
     IngestResponse,
@@ -7,8 +7,8 @@ from app.models.schemas import (
 )
 from app.workflows.rag_graph import ingestion_graph
 from app.services.retrieval_service import search_chunks
-from app.services.compliance_auditor import audit_content
 from app.core.config import settings
+from app.core.ingestion_tracker import is_duplicate, mark_as_ingested
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -27,6 +27,13 @@ def ingest_video(request: IngestRequest):
     Full ingestion pipeline:
     Download → Transcribe → OCR → Chunk → Index → Audit
     """
+    # Duplicate check before running expensive pipeline
+    if is_duplicate(request.url):
+        raise HTTPException(
+            status_code=409,
+            detail="This video has already been ingested. Use /query to search it.",
+        )
+
     initial_state = {
         "url": request.url,
         "video_path": None,
@@ -43,6 +50,13 @@ def ingest_video(request: IngestRequest):
 
     if result.get("error"):
         raise HTTPException(status_code=500, detail=result["error"])
+
+    # Mark as ingested only after successful pipeline
+    mark_as_ingested(
+        url=request.url,
+        video_id=result["metadata"].video_id,
+        video_title=result["metadata"].title,
+    )
 
     return IngestResponse(
         video_id=result["metadata"].video_id,
@@ -71,7 +85,6 @@ def query_videos(request: QueryRequest):
             detail="No relevant content found. Try ingesting a video first.",
         )
 
-    # Build context from retrieved chunks
     context = "\n\n".join([
         f"[{c.source_type.upper()} | {c.video_title}] {c.text}"
         for c in chunks

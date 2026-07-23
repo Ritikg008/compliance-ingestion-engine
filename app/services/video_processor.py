@@ -1,10 +1,19 @@
-import yt_dlp
+import shutil
+import uuid
 import cv2
 import os
-import uuid
 from pathlib import Path
 from typing import List, Tuple
+
+import yt_dlp
+
 from app.core.config import settings
+
+
+def _node_js_runtime() -> dict:
+    """Enable Node for yt-dlp YouTube JS challenges when available."""
+    path = settings.node_path or shutil.which("node")
+    return {"node": {"path": path} if path else {}}
 
 
 def download_video(url: str) -> Tuple[Path, dict]:
@@ -16,11 +25,12 @@ def download_video(url: str) -> Tuple[Path, dict]:
     output_template = str(settings.temp_video_dir / f"{video_id}.%(ext)s")
 
     ydl_opts = {
-        "format": "18/bv*[height<=480]+ba/b[height<=480]/best",
+        "format": "18/best[height<=720]/best",
         "merge_output_format": "mp4",
         "outtmpl": output_template,
         "quiet": True,
         "no_warnings": True,
+        "js_runtimes": _node_js_runtime(),
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -41,8 +51,6 @@ def extract_frames(video_path: Path, interval_seconds: int = 5) -> List[Path]:
     """
     Extracts one frame every `interval_seconds` from the video.
     Frames are saved as JPGs in temp_frames_dir.
-    Sampling every N seconds (not every frame) keeps this fast and
-    memory-light on CPU-only hardware.
     """
     cap = cv2.VideoCapture(str(video_path))
     fps = cap.get(cv2.CAP_PROP_FPS) or 25
