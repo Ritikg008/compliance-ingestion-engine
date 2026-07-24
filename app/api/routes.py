@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.core.ingestion_tracker import is_duplicate, mark_as_ingested
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
-
+from app.services.reranker_service import rerank_chunks
 router = APIRouter()
 
 
@@ -69,13 +69,9 @@ def ingest_video(request: IngestRequest):
 
 @router.post("/query", response_model=QueryResponse)
 def query_videos(request: QueryRequest):
-    """
-    RAG query endpoint:
-    Embeds question → retrieves relevant chunks → generates grounded answer.
-    """
     chunks = search_chunks(
         query=request.question,
-        top_k=5,
+        top_k=15,
         video_id=request.video_id,
     )
 
@@ -85,9 +81,16 @@ def query_videos(request: QueryRequest):
             detail="No relevant content found. Try ingesting a video first.",
         )
 
+    
+    reranked_chunks = rerank_chunks(
+        query=request.question,
+        chunks=chunks,
+        top_k=5,
+    )
+
     context = "\n\n".join([
         f"[{c.source_type.upper()} | {c.video_title}] {c.text}"
-        for c in chunks
+        for c in reranked_chunks
     ])
 
     llm = ChatGroq(
@@ -114,5 +117,5 @@ def query_videos(request: QueryRequest):
     return QueryResponse(
         question=request.question,
         answer=response.content.strip(),
-        sources=chunks,
+        sources=reranked_chunks,
     )
