@@ -1,6 +1,8 @@
 from langgraph.graph import StateGraph, END
 from typing import TypedDict, List, Optional
 from pathlib import Path
+from app.services.chunking_service import chunk_transcript, chunk_ocr_text
+
 from app.models.schemas import (
     VideoMetadata,
     TranscriptionResult,
@@ -117,50 +119,58 @@ def ocr_node(state: IngestionState) -> IngestionState:
     except Exception as e:
         return {**state, "error": f"OCR failed: {str(e)}"}
 
-
 def chunking_node(state: IngestionState) -> IngestionState:
     """
-    Converts transcription segments and OCR results into
-    indexable DocumentChunks.
+    Converts transcription and OCR into semantically coherent chunks
+    with overlap and timestamp metadata.
     """
     if state.get("error"):
         return state
-    print("  [Node 4/6] Chunking content...")
+    print("[Node 4/6] Semantic chunking with overlap...")
     try:
         chunks = []
         meta = state["metadata"]
 
-        # Transcript chunks — one chunk per segment
+        # Semantic chunking of full transcript with timestamp mapping
         if state.get("transcription"):
-            for seg in state["transcription"].segments:
-                if seg.text.strip():
-                    chunks.append(DocumentChunk(
-                        chunk_id=str(uuid.uuid4()),
-                        video_id=meta.video_id,
-                        video_title=meta.title,
-                        source_type="transcript",
-                        text=seg.text.strip(),
-                        start_time=seg.start,
-                    ))
+            full_text = state["transcription"].full_text
+            segments = state["transcription"].segments
+            if full_text.strip():
+                transcript_chunks = chunk_transcript(full_text, segments)
+                print(f"    Transcript → {len(transcript_chunks)} semantic chunks")
+                for chunk_data in transcript_chunks:
+                    if chunk_data["text"].strip():
+                        chunks.append(DocumentChunk(
+                            chunk_id=str(uuid.uuid4()),
+                            video_id=meta.video_id,
+                            video_title=meta.title,
+                            source_type="transcript",
+                            text=chunk_data["text"].strip(),
+                            start_time=chunk_data.get("start_time"),
+                        ))
 
-        # OCR chunks — one chunk per frame that had text
+        # Semantic chunking of OCR text per frame
         if state.get("ocr_results"):
             for ocr in state["ocr_results"]:
                 if ocr.text.strip():
-                    chunks.append(DocumentChunk(
-                        chunk_id=str(uuid.uuid4()),
-                        video_id=meta.video_id,
-                        video_title=meta.title,
-                        source_type="ocr",
-                        text=ocr.text.strip(),
-                        frame_path=ocr.frame,
-                    ))
+                    ocr_chunks = chunk_ocr_text(ocr.text)
+                    for chunk_data in ocr_chunks:
+                        if chunk_data["text"].strip():
+                            chunks.append(DocumentChunk(
+                                chunk_id=str(uuid.uuid4()),
+                                video_id=meta.video_id,
+                                video_title=meta.title,
+                                source_type="ocr",
+                                text=chunk_data["text"].strip(),
+                                frame_path=ocr.frame,
+                            ))
 
+        print(f"    Total chunks: {len(chunks)}")
         return {**state, "chunks": chunks}
     except Exception as e:
         return {**state, "error": f"Chunking failed: {str(e)}"}
 
-
+    
 def indexing_node(state: IngestionState) -> IngestionState:
     """Embeds and stores all chunks into Qdrant."""
     if state.get("error"):
